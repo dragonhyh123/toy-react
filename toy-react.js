@@ -1,34 +1,105 @@
 const RENDER_TO_DOM = Symbol("render to dom");
 
-class ElementWrapper{
-    constructor(type) {
-        this.root = document.createElement(type);
+export class Component{
+    constructor() {
+        this.props = Object.create(null);
+        this.children = [];
+        this._root = null;
+        this._range = null;
     }
-
     setAttribute(name,value){
-        if(name.match(/^on([\s\S]+)/)){
-            this.root.addEventListener(RegExp.$1.replace(/^[\s\S]/,c=>c.toLowerCase()),value);
-        }else{
-            this.root.setAttribute(name,value);
-        }
+        this.props[name] = value;
     }
 
     appendChild(component){
-        let range = document.createRange();
-        range.setStart(this.root,this.root.childNodes.length);
-        range.setEnd(this.root,this.root.childNodes.length);
-        component[RENDER_TO_DOM](range);
+        this.children.push(component);
     }
 
+    get vdom(){
+        return this.render().vdom;
+    }
+
+    //私有组件
+    [RENDER_TO_DOM](range){
+        this._range = range;
+        this.render()[RENDER_TO_DOM](range);
+    }
+
+    rerender(){
+        this._range.deleteContents();
+        this[RENDER_TO_DOM](this._range);
+    }
+
+    setState(newState){
+        if(this.state===null || typeof this.state !== "object"){
+            this.state = newState;
+            this.rerender();
+            return;
+        }
+        let merge = (oldState,newState)=>{
+            for(let p in newState){
+                if(oldState[p]===null || typeof oldState[p] !== "object"){       //因为null值的typeof结果是object，所以使用typeof === “object”的时候，一定要跟===null判断一起使用
+                    oldState[p] = newState[p];
+                }else{
+                    merge(oldState[p], newState[p]);
+                }
+            }
+        }
+        merge(this.state,newState);
+        this.rerender();
+    }
+}
+
+class ElementWrapper extends Component{
+    constructor(type) {
+        super(type);
+        this.type = type;
+        this.root = document.createElement(type);
+    }
+
+    // setAttribute(name,value){
+    //     if(name.match(/^on([\s\S]+)/)){
+    //         this.root.addEventListener(RegExp.$1.replace(/^[\s\S]/,c=>c.toLowerCase()),value);
+    //     }else{
+    //         if(name==="className"){
+    //             this.root.setAttribute("class",value);
+    //         }else {
+    //             this.root.setAttribute(name,value);
+    //         }
+    //     }
+    // }
+    //
+    // appendChild(component){
+    //     let range = document.createRange();
+    //     range.setStart(this.root,this.root.childNodes.length);
+    //     range.setEnd(this.root,this.root.childNodes.length);
+    //     component[RENDER_TO_DOM](range);
+    // }
+
+    get vdom(){
+        return{
+            type:this.type,
+            props:this.props,
+            children:this.children.map(child=>child.vdom)
+        }
+    }
     [RENDER_TO_DOM](range){
         range.deleteContents();
         range.insertNode(this.root);
     }
 }
 
-class TextWrapper{
+class TextWrapper extends Component{
     constructor(content) {
+        super(content);
         this.root = document.createTextNode(content);
+    }
+
+    get vdom(){
+        return{
+            type:"#text",
+            content:this.content
+        }
     }
 
     [RENDER_TO_DOM](range){
@@ -75,50 +146,4 @@ export function render(component,parentElement){
     range.setEnd(parentElement,parentElement.childNodes.length);
     range.deleteContents();
     component[RENDER_TO_DOM](range);
-}
-
-export class Component{
-    constructor() {
-        this.props = Object.create(null);
-        this.children = [];
-        this._root = null;
-        this._range = null;
-    }
-    setAttribute(name,value){
-        this.props[name] = value;
-    }
-
-    appendChild(component){
-        this.children.push(component);
-    }
-
-    //私有组件
-    [RENDER_TO_DOM](range){
-        this._range = range;
-        this.render()[RENDER_TO_DOM](range);
-    }
-
-    rerender(){
-        this._range.deleteContents();
-        this[RENDER_TO_DOM](this._range);
-    }
-
-    setState(newState){
-        if(this.state===null || typeof this.state !== "object"){
-            this.state = newState;
-            this.rerender();
-            return;
-        }
-        let merge = (oldState,newState)=>{
-            for(let p in newState){
-                if(oldState[p]===null || typeof oldState[p] !== "object"){       //因为null值的typeof结果是object，所以使用typeof === “object”的时候，一定要跟===null判断一起使用
-                    oldState[p] = newState[p];
-                }else{
-                    merge(oldState[p], newState[p]);
-                }
-            }
-        }
-        merge(this.state,newState);
-        this.rerender();
-    }
 }
