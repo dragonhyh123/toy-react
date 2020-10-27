@@ -6,16 +6,18 @@ class ElementWrapper{
     }
 
     setAttribute(name,value){
-        this.root.setAttribute(name,value);
+        if(name.match(/^on([\s\S]+)/)){
+            this.root.addEventListener(RegExp.$1.replace(/^[\s\S]/,c=>c.toLowerCase()),value);
+        }else{
+            this.root.setAttribute(name,value);
+        }
     }
 
     appendChild(component){
         let range = document.createRange();
-        range.setStart(parentElement,0);
-        range.setEnd(parentElement,parentElement.childNodes.length);
-        range.deleteContents();
+        range.setStart(this.root,this.root.childNodes.length);
+        range.setEnd(this.root,this.root.childNodes.length);
         component[RENDER_TO_DOM](range);
-        this.root.appendChild(component.root);
     }
 
     [RENDER_TO_DOM](range){
@@ -52,6 +54,9 @@ export function createElement(type,attributes,...children){
             if(typeof child === 'string'){
                 child = new TextWrapper(child)
             }
+            if(child === null){
+                continue;
+            }
             if(typeof child === 'object' && child instanceof Array){
                 insertChildren(child);
             }else{
@@ -77,6 +82,7 @@ export class Component{
         this.props = Object.create(null);
         this.children = [];
         this._root = null;
+        this._range = null;
     }
     setAttribute(name,value){
         this.props[name] = value;
@@ -88,6 +94,31 @@ export class Component{
 
     //私有组件
     [RENDER_TO_DOM](range){
+        this._range = range;
         this.render()[RENDER_TO_DOM](range);
+    }
+
+    rerender(){
+        this._range.deleteContents();
+        this[RENDER_TO_DOM](this._range);
+    }
+
+    setState(newState){
+        if(this.state===null || typeof this.state !== "object"){
+            this.state = newState;
+            this.rerender();
+            return;
+        }
+        let merge = (oldState,newState)=>{
+            for(let p in newState){
+                if(oldState[p]===null || typeof oldState[p] !== "object"){       //因为null值的typeof结果是object，所以使用typeof === “object”的时候，一定要跟===null判断一起使用
+                    oldState[p] = newState[p];
+                }else{
+                    merge(oldState[p], newState[p]);
+                }
+            }
+        }
+        merge(this.state,newState);
+        this.rerender();
     }
 }
